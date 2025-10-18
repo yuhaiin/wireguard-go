@@ -15,7 +15,7 @@ var (
 	QueueOutboundSize                 = 1024
 	QueueInboundSize                  = 1024
 	QueueHandshakeSize                = 1024
-	PreallocatedBuffersPerPool uint32 = 1024
+	PreallocatedBuffersPerPool uint32 = 512
 )
 
 const MaxSegmentSize = 1700
