@@ -353,8 +353,10 @@ func (tun *NativeTun) nameSlow() (string, error) {
 func (tun *NativeTun) Write(bufs [][]byte, offset int) (int, error) {
 	tun.writeOpMu.Lock()
 	defer func() {
-		tun.tcpGROTable.reset()
-		tun.udpGROTable.reset()
+		if tun.vnetHdr {
+			tun.tcpGROTable.reset()
+			tun.udpGROTable.reset()
+		}
 		tun.toWrite.reset()
 		tun.writeOpMu.Unlock()
 	}()
@@ -529,9 +531,7 @@ func (tun *NativeTun) initFromFlags(name string) error {
 		return err
 	}
 	if e := sc.Control(func(fd uintptr) {
-		var (
-			ifr *unix.Ifreq
-		)
+		var ifr *unix.Ifreq
 		ifr, err = unix.NewIfreq(name)
 		if err != nil {
 			return
@@ -606,9 +606,9 @@ func CreateTUNFromFile(file *os.File, mtu int) (Device, error) {
 		events:                  make(chan Event, 5),
 		errors:                  make(chan error, 5),
 		statusListenersShutdown: make(chan struct{}),
-		tcpGROTable:             newTCPGROTable(),
-		udpGROTable:             newUDPGROTable(),
-		toWrite:                 newGROToWrite(),
+		// tcpGROTable:             newTCPGROTable(),
+		// udpGROTable:             newUDPGROTable(),
+		toWrite: newGROToWrite(),
 	}
 
 	tun.tunRawConn, err = tun.tunFile.SyscallConn()
@@ -624,6 +624,11 @@ func CreateTUNFromFile(file *os.File, mtu int) (Device, error) {
 	err = tun.initFromFlags(name)
 	if err != nil {
 		return nil, err
+	}
+
+	if tun.vnetHdr {
+		tun.tcpGROTable = newTCPGROTable()
+		tun.udpGROTable = newUDPGROTable()
 	}
 
 	// start event listener
@@ -664,12 +669,12 @@ func CreateUnmonitoredTUNFromFD(fd int) (Device, string, error) {
 	}
 	file := os.NewFile(uintptr(fd), "/dev/tun")
 	tun := &NativeTun{
-		tunFile:     file,
-		events:      make(chan Event, 5),
-		errors:      make(chan error, 5),
-		tcpGROTable: newTCPGROTable(),
-		udpGROTable: newUDPGROTable(),
-		toWrite:     newGROToWrite(),
+		tunFile: file,
+		events:  make(chan Event, 5),
+		errors:  make(chan error, 5),
+		// tcpGROTable: newTCPGROTable(),
+		// udpGROTable: newUDPGROTable(),
+		toWrite: newGROToWrite(),
 	}
 	tun.tunRawConn, err = tun.tunFile.SyscallConn()
 	if err != nil {
@@ -683,5 +688,11 @@ func CreateUnmonitoredTUNFromFD(fd int) (Device, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+
+	if tun.vnetHdr {
+		tun.tcpGROTable = newTCPGROTable()
+		tun.udpGROTable = newUDPGROTable()
+	}
+
 	return tun, name, err
 }
